@@ -72,4 +72,308 @@
         </div>
         <div class="form-group">
             <label>차수 (예: 제10차)</label>
-            <input type="
+            <input type="text" id="meetingRound" placeholder="예: 제10차">
+        </div>
+        <button class="submit-btn" onclick="addMeeting()">회의 등록</button>
+    </div>
+
+    <div class="panel">
+        <h3>2. 안건 결과 등록</h3>
+        <div class="form-group">
+            <label>대상 회의 (마감 안 된 회의만 표시됨)</label>
+            <select id="agendaMeetingSelect">
+                <option value="">회의를 먼저 등록해주세요</option>
+            </select>
+        </div>
+        <div class="form-group" style="display: flex; gap: 5px;">
+            <div style="flex: 1;">
+                <label>매체</label>
+                <select id="agendaCategory">
+                    <option value="지상파">지상파</option>
+                    <option value="종편">종편</option>
+                    <option value="전편">전편</option>
+                    <option value="광고">광고</option>
+                    <option value="상판">상판</option>
+                </select>
+            </div>
+            <div style="flex: 2;">
+                <label>안건/프로그램명</label>
+                <input type="text" id="agendaName" placeholder="예: MBC 뉴스데스크">
+            </div>
+        </div>
+        <div class="form-group">
+            <label>의결 결과</label>
+            <select id="agendaResult">
+                <option value="문제없음">문제없음</option>
+                <option value="의견제시">의견제시 (행정지도)</option>
+                <option value="권고">권고 (행정지도)</option>
+                <option value="주의">주의 (법정제재)</option>
+                <option value="경고">경고 (법정제재)</option>
+                <option value="관계자징계">관계자징계 (법정제재)</option>
+                <option value="과징금">과징금 (법정제재)</option>
+            </select>
+        </div>
+        <button class="submit-btn" onclick="addAgenda()">안건 결과 등록</button>
+    </div>
+
+    <div class="panel">
+        <h3>3. 데이터 관리 (마감 및 삭제)</h3>
+        <div class="form-group">
+            <label>회의 마감 처리 (선택 창에서 숨김)</label>
+            <div style="display: flex; gap: 5px;">
+                <select id="manageMeetingSelect" style="flex: 1;"></select>
+                <button class="action-btn" onclick="toggleMeetingStatus()">마감</button>
+                <button class="action-btn danger-btn" onclick="deleteMeeting()">삭제</button>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>안건 개별 삭제</label>
+            <div style="display: flex; gap: 5px;">
+                <select id="manageAgendaSelect" style="flex: 1;"></select>
+                <button class="action-btn danger-btn" onclick="deleteAgenda()">삭제</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="calendar-header">
+    <button onclick="changeMonth(-1)">◀ 이전 달</button>
+    <h2 id="currentMonthLabel" style="margin: 0;"></h2>
+    <button onclick="changeMonth(1)">다음 달 ▶</button>
+</div>
+<div class="calendar-grid" id="calendarGrid">
+</div>
+
+<script>
+    // 1번(회의관리) 웹사이트 전용 이름표 유지
+    let meetings = JSON.parse(localStorage.getItem('kcsc_board_meetings')) || [];
+    let agendas = JSON.parse(localStorage.getItem('kcsc_board_agendas')) || [];
+    let completedEvents = JSON.parse(localStorage.getItem('kcsc_board_completed')) || [];
+
+    let currentDate = new Date();
+
+    function init() {
+        updateMeetingSelect();
+        renderCalendar();
+    }
+
+    function saveData() {
+        localStorage.setItem('kcsc_board_meetings', JSON.stringify(meetings));
+        localStorage.setItem('kcsc_board_agendas', JSON.stringify(agendas));
+        localStorage.setItem('kcsc_board_completed', JSON.stringify(completedEvents));
+        init();
+    }
+
+    function clearData() {
+        if(confirm("모든 일정 데이터를 완전히 삭제하시겠습니까? (복구 불가)")) {
+            localStorage.removeItem('kcsc_board_meetings');
+            localStorage.removeItem('kcsc_board_agendas');
+            localStorage.removeItem('kcsc_board_completed');
+            meetings = []; agendas = []; completedEvents = [];
+            init();
+        }
+    }
+
+    function addMeeting() {
+        let type = document.getElementById('meetingType').value;
+        let date = document.getElementById('meetingDate').value;
+        let round = document.getElementById('meetingRound').value;
+        
+        if(!date || !round) return alert("날짜와 차수를 모두 입력해주세요.");
+        
+        meetings.push({ id: Date.now().toString(), type, date, round, isClosed: false });
+        saveData();
+        alert(`일정이 등록되었습니다.`);
+    }
+
+    function addAgenda() {
+        let meetingId = document.getElementById('agendaMeetingSelect').value;
+        let category = document.getElementById('agendaCategory').value;
+        let name = document.getElementById('agendaName').value;
+        let result = document.getElementById('agendaResult').value;
+
+        if(!meetingId || !name) return alert("회의 선택과 안건명을 모두 입력해주세요.");
+
+        agendas = agendas.filter(a => !(a.meetingId === meetingId && a.name === name));
+        agendas.push({ id: Date.now().toString(), meetingId, category, name, result });
+        saveData();
+        alert(`[${name}] 결과가 등록되었습니다.`);
+    }
+
+    function updateMeetingSelect() {
+        let select = document.getElementById('agendaMeetingSelect');
+        select.innerHTML = '<option value="">선택하세요</option>';
+        let sorted = [...meetings].sort((a,b) => new Date(b.date) - new Date(a.date));
+        
+        sorted.forEach(m => {
+            if(!m.isClosed) {
+                let cleanRound = m.round.replace(/차$/, ''); 
+                let shortType = m.type === '방송소위' ? '방송' : '전체';
+                select.innerHTML += `<option value="${m.id}">[${m.date}] 제${cleanRound}차(${shortType})</option>`;
+            }
+        });
+
+        let mSelect = document.getElementById('manageMeetingSelect');
+        mSelect.innerHTML = '<option value="">선택하세요</option>';
+        sorted.forEach(m => {
+            let cleanRound = m.round.replace(/차$/, ''); 
+            let shortType = m.type === '방송소위' ? '방송' : '전체';
+            let status = m.isClosed ? "(마감됨)" : "";
+            mSelect.innerHTML += `<option value="${m.id}">[${m.date}] 제${cleanRound}차(${shortType}) ${status}</option>`;
+        });
+
+        let aSelect = document.getElementById('manageAgendaSelect');
+        aSelect.innerHTML = '<option value="">선택하세요</option>';
+        let sortedA = [...agendas].reverse(); 
+        sortedA.forEach(a => {
+            let m = meetings.find(x => x.id === a.meetingId);
+            let mInfo = m ? `[${m.round}] ` : '';
+            aSelect.innerHTML += `<option value="${a.id}">${mInfo}${a.name}</option>`;
+        });
+    }
+
+    function toggleMeetingStatus() {
+        let id = document.getElementById('manageMeetingSelect').value;
+        if(!id) return alert("회의를 선택하세요.");
+        let m = meetings.find(x => x.id === id);
+        m.isClosed = !m.isClosed;
+        saveData();
+    }
+
+    function deleteMeeting() {
+        let id = document.getElementById('manageMeetingSelect').value;
+        if(!id) return alert("회의를 선택하세요.");
+        if(confirm("회의와 관련된 모든 안건이 삭제됩니다. 계속하시겠습니까?")) {
+            meetings = meetings.filter(m => m.id !== id);
+            agendas = agendas.filter(a => a.meetingId !== id);
+            saveData();
+        }
+    }
+
+    function deleteAgenda() {
+        let id = document.getElementById('manageAgendaSelect').value;
+        if(!id) return alert("안건을 선택하세요.");
+        if(confirm("해당 안건을 삭제하시겠습니까?")) {
+            agendas = agendas.filter(a => a.id !== id);
+            saveData();
+        }
+    }
+
+    function toDateStr(dateObj) {
+        let y = dateObj.getFullYear();
+        let m = String(dateObj.getMonth() + 1).padStart(2, '0');
+        let d = String(dateObj.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
+
+    function changeMonth(delta) {
+        currentDate.setMonth(currentDate.getMonth() + delta);
+        renderCalendar();
+    }
+
+    window.toggleComplete = function(eventId) {
+        if(completedEvents.includes(eventId)) {
+            completedEvents = completedEvents.filter(id => id !== eventId);
+        } else {
+            completedEvents.push(eventId);
+        }
+        saveData();
+    }
+
+    function renderCalendar() {
+        const grid = document.getElementById('calendarGrid');
+        grid.innerHTML = '';
+        
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth();
+        document.getElementById('currentMonthLabel').innerText = `${year}년 ${month + 1}월`;
+
+        const days = ['일', '월', '화', '수', '목', '금', '토'];
+        days.forEach(d => grid.innerHTML += `<div class="calendar-cell header">${d}</div>`);
+
+        const firstDay = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+        for(let i=0; i<firstDay; i++) grid.innerHTML += `<div class="calendar-cell"></div>`;
+
+        let allEvents = [];
+
+        meetings.forEach(m => {
+            let cleanRound = m.round.replace(/차$/, '');
+            let shortType = m.type === '방송소위' ? '방송' : '전체';
+            allEvents.push({
+                id: `meet_${m.id}`,
+                date: m.date,
+                text: `[${shortType}] 제${cleanRound}차`,
+                className: 'color-meeting'
+            });
+        });
+
+        agendas.forEach(a => {
+            let m = meetings.find(x => x.id === a.meetingId);
+            if(!m) return;
+            
+            let mDate = new Date(m.date);
+            let cleanRound = m.round.replace(/차$/, ''); 
+            
+            allEvents.push({
+                id: `agenda_${a.id}`,
+                date: m.date,
+                text: `[${a.category}] ${a.name} (${a.result})`,
+                className: 'color-agenda'
+            });
+
+            // 방송소위 (행정지도): 차주 화요일 취합(+7일), 차주 목요일 결재(+9일)
+            if(m.type === '방송소위' && (a.result === '의견제시' || a.result === '권고')) {
+                let tue = new Date(mDate); tue.setDate(mDate.getDate() + 7); 
+                let thu = new Date(mDate); thu.setDate(mDate.getDate() + 9); 
+                
+                allEvents.push({
+                    id: `admin_g1_${a.id}`, date: toDateStr(tue),
+                    text: `[${cleanRound}차 취합] ${a.name} 행정지도문`, className: 'color-admin-guide'
+                });
+                allEvents.push({
+                    id: `admin_g2_${a.id}`, date: toDateStr(thu),
+                    text: `[${cleanRound}차 결재] ${a.name} 행정지도문`, className: 'color-admin-guide'
+                });
+            }
+
+            // 전체회의 (법정제재): 차차주 화요일 취합(+15일), 차차주 목요일 결재(+17일)
+            if(m.type === '전체회의' && ['주의', '경고', '관계자징계', '과징금'].includes(a.result)) {
+                let tue = new Date(mDate); tue.setDate(mDate.getDate() + 15); 
+                let thu = new Date(mDate); thu.setDate(mDate.getDate() + 17); 
+                
+                allEvents.push({
+                    id: `sanc_1_${a.id}`, date: toDateStr(tue),
+                    text: `[${cleanRound}차 취합] ${a.name} 의결서`, className: 'color-sanction'
+                });
+                allEvents.push({
+                    id: `sanc_2_${a.id}`, date: toDateStr(thu),
+                    text: `[${cleanRound}차 결재] ${a.name} 의결서`, className: 'color-sanction'
+                });
+            }
+        });
+
+        for(let d=1; d<=daysInMonth; d++) {
+            let cellDate = toDateStr(new Date(year, month, d));
+            let dayOfWeek = new Date(year, month, d).getDay();
+            let numClass = dayOfWeek === 0 ? 'weekend-sun' : (dayOfWeek === 6 ? 'weekend-sat' : '');
+            
+            let cellHtml = `<div class="calendar-cell"><span class="date-num ${numClass}">${d}</span>`;
+            
+            let dayEvents = allEvents.filter(e => e.date === cellDate);
+            dayEvents.forEach(e => {
+                let isCompleted = completedEvents.includes(e.id) ? 'completed' : '';
+                cellHtml += `<div class="event-badge ${e.className} ${isCompleted}" onclick="toggleComplete('${e.id}')">${e.text}</div>`;
+            });
+            
+            cellHtml += `</div>`;
+            grid.innerHTML += cellHtml;
+        }
+    }
+
+    init();
+</script>
+
+</body>
+</html>
