@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📅 방심위 통합 업무 캘린더 (소위/전체 연동판)</title>
+    <style>
+        body { font-family: 'Malgun Gothic', sans-serif; background-color: #f4f7f6; margin: 0; padding: 20px; color: #333; }
+        .header-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        h1 { margin: 0; font-size: 24px; color: #2c3e50; }
+        .reset-btn { background-color: #e74c3c; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        .reset-btn:hover { background-color: #c0392b; }
+        
+        .control-panel { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+        .panel { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .panel h3 { margin-top: 0; color: #34495e; border-bottom: 2px solid #ecf0f1; padding-bottom: 10px; }
+        
+        .form-group { margin-bottom: 15px; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 14px; }
+        .form-group input, .form-group select { width: 100%; padding: 8px; border: 1px solid #bdc3c7; border-radius: 4px; box-sizing: border-box; }
+        button.submit-btn { width: 100%; padding: 10px; background-color: #3498db; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        button.submit-btn:hover { background-color: #2980b9; }
+
+        .calendar-header { display: flex; justify-content: space-between; align-items: center; background: white; padding: 15px; border-radius: 10px 10px 0 0; border-bottom: 1px solid #ecf0f1; }
+        .calendar-header button { background: #ecf0f1; border: none; padding: 5px 15px; border-radius: 3px; cursor: pointer; }
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); background: #bdc3c7; gap: 1px; border: 1px solid #bdc3c7; }
+        .calendar-cell { background: white; min-height: 120px; padding: 10px; }
+        .calendar-cell.header { background: #f8f9fa; text-align: center; font-weight: bold; min-height: auto; padding: 10px 0; }
+        .date-num { font-weight: bold; margin-bottom: 5px; display: inline-block; }
+        .weekend-sat { color: #2980b9; }
+        .weekend-sun { color: #e74c3c; }
+
+        .event-badge { font-size: 11px; padding: 4px; margin-bottom: 4px; border-radius: 3px; cursor: pointer; display: block; border-left: 3px solid rgba(0,0,0,0.2); }
+        .event-badge.completed { text-decoration: line-through; opacity: 0.5; background-color: #ecf0f1 !important; color: #7f8c8d !important; }
+        
+        /* 색상 정의 */
+        .color-meeting { background-color: #e8f4f8; color: #0056b3; } /* 회의일정 */
+        .color-agenda { background-color: #fcf3cf; color: #b9770e; } /* 안건단순등록 */
+        .color-admin-guide { background-color: #d4edda; color: #155724; } /* 행정지도 후속 */
+        .color-sanction { background-color: #f8d7da; color: #721c24; } /* 법정제재 후속 */
+    </style>
+</head>
+<body>
+
+<div class="header-container">
+    <h1>📅 방심위 업무 자동화 캘린더 (소위/전체 연동판)</h1>
+    <button class="reset-btn" onclick="clearData()">🚨 데이터 초기화</button>
+</div>
+
+<div class="control-panel">
+    <div class="panel">
+        <h3>1. 회의 일정 등록 (소위/전체회의)</h3>
+        <div class="form-group">
+            <label>회의 구분</label>
+            <select id="meetingType">
+                <option value="방송소위">방송심의소위원회 (주로 화요일)</option>
+                <option value="전체회의">전체회의 (주로 격주 월요일)</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>회의 날짜</label>
+            <input type="date" id="meetingDate">
+        </div>
+        <div class="form-group">
+            <label>차수 (예: 제10차)</label>
+            <input type="text" id="meetingRound" placeholder="예: 제10차">
+        </div>
+        <button class="submit-btn" onclick="addMeeting()">회의 등록</button>
+    </div>
+
+    <div class="panel">
+        <h3>2. 안건 및 결과 등록</h3>
+        <div class="form-group">
+            <label>대상 회의 선택 (위에서 등록한 회의)</label>
+            <select id="agendaMeetingSelect">
+                <option value="">회의를 먼저 등록해주세요</option>
+            </select>
+        </div>
+        <div class="form-group" style="display: flex; gap: 10px;">
+            <div style="flex: 1;">
+                <label>매체 구분</label>
+                <select id="agendaCategory">
+                    <option value="지상파">지상파</option>
+                    <option value="종편">종편</option>
+                    <option value="전편">전편</option>
+                </select>
+            </div>
+            <div style="flex: 2;">
+                <label>안건/프로그램명</label>
+                <input type="text" id="agendaName" placeholder="예: MBC 뉴스데스크">
+            </div>
+        </div>
+        <div class="form-group">
+            <label>의결 결과</label>
+            <select id="agendaResult">
+                <option value="문제없음">문제없음</option>
+                <option value="의견제시">의견제시 (행정지도)</option>
+                <option value="권고">권고 (행정지도)</option>
+                <option value="주의">주의 (법정제재)</option>
+                <option value="경고">경고 (법정제재)</option>
+                <option value="관계자징계">관계자징계 (법정제재)</option>
+                <option value="과징금">과징금 (법정제재)</option>
+            </select>
+        </div>
+        <button class="submit-btn" onclick="addAgenda()">안건 결과 등록</button>
+    </div>
+</div>
+
+<div class="calendar-header">
+    <button onclick="changeMonth(-1)">◀ 이전 달</button>
+    <h2 id="currentMonthLabel" style="margin: 0;">2026년 6월</h2>
+    <button onclick="changeMonth(1)">다음 달 ▶</button>
+</div>
+<div class="calendar-grid" id="calendarGrid">
+    </div>
+
+<script>
+    // 데이터 보관용 배열
+    let meetings = JSON.parse(localStorage.getItem('kcsc_meetings')) || [];
+    let agendas = JSON.parse(localStorage.getItem('kcsc_agendas')) || [];
+    let completedEvents = JSON.parse(localStorage.getItem('kcsc_completed')) || [];
+
+    let currentDate = new Date();
+
+    // 초기화 및 렌더링
+    function init() {
+        updateMeetingSelect();
+        renderCalendar();
+    }
+
+    function saveData() {
+        localStorage.setItem('kcsc_meetings', JSON.stringify(meetings));
+        localStorage.setItem('kcsc_agendas', JSON.stringify(agendas));
+        localStorage.setItem('kcsc_completed', JSON.stringify(completedEvents));
+        init();
+    }
+
+    function clearData() {
+        if(confirm("모든 일정 데이터를 삭제하시겠습니까?")) {
+            localStorage.clear();
+            meetings = []; agendas = []; completedEvents = [];
+            init();
+            alert("초기화 되었습니다.");
+        }
+    }
+
+    // 회의 등록 로직
+    function addMeeting() {
+        let type = document.getElementById('meetingType').value;
+        let date = document.getElementById('meetingDate').value;
+        let round = document.getElementById('meetingRound').value;
+        
+        if(!date || !round) return alert("날짜와 차수를 모두 입력해주세요.");
+        
+        meetings.push({ id: Date.now().toString(), type, date, round });
+        saveData();
+        alert(`${round} ${type} 일정이 등록되었습니다.`);
+    }
+
+    function updateMeetingSelect() {
+        let select = document.getElementById('agendaMeetingSelect');
+        select.innerHTML = '<option value="">선택하세요</option>';
+        // 최신 회의가 위로 오도록 정렬
+        let sorted = [...meetings].sort((a,b) => new Date(b.date) - new Date(a.date));
+        sorted.forEach(m => {
+            select.innerHTML += `<option value="${m.id}">[${m.date}] ${m.round} ${m.type}</option>`;
+        });
+    }
+
+    // 안건 등록 로직
+    function addAgenda() {
+        let meetingId = document.getElementById('agendaMeetingSelect').value;
+        let category = document.getElementById('agendaCategory').value;
+        let name = document.getElementById('agendaName').value;
+        let result = document.getElementById('agendaResult').value;
+
+        if(!meetingId || !name) return alert("회의 선택과 안건명을 모두 입력해주세요.");
+
+        // 기존 동일 안건이 있다면 삭제 후 덮어쓰기 (수정 기능)
+        agendas = agendas.filter(a => !(a.meetingId === meetingId && a.name === name));
+        
+        agendas.push({ id: Date.now().toString(), meetingId, category, name, result });
+        saveData();
+        alert(`안건 [${name}]의 결과가 '${result}'(으)로 등록되었습니다.`);
+    }
+
+    // 날짜 포맷 헬퍼 (YYYY-MM-DD)
+    function toDateStr(dateObj) {
+        let y = dateObj.getFullYear();
+        let m = String(dateObj.getMonth() + 1).padStart(2, '0');
+        let d = String(dateObj.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
+
+    // 달력 날짜 이동
+    function changeMonth(delta) {
+        currentDate.setMonth(currentDate.getMonth() + delta);
+        renderCalendar();
+    }
+
+    // 완료 토글 기능
+    window.toggleComplete = function(eventId) {
+        if(completedEvents.includes(eventId)) {
+            completedEvents = completedEvents.filter(id => id !== eventId);
+        } else {
+            completedEvents.push(eventId);
+        }
+        saveData();
+    }
+
+    // 메인 달력 렌더링 로직
+    function renderCalendar() {
+        const grid = document.getElementById('calendarGrid');
+        grid.innerHTML = '';
+        
+        const year = currentDate.getFullYear();
+        const month = currentDate.getMonth();
+        document.getElementById('currentMonthLabel').innerText = `${year}년 ${month + 1}월`;
+
+        const days = ['일', '월', '화', '수', '목', '금', '토'];
+        days.forEach(d => grid.innerHTML += `<div class="calendar-cell header">${d}</div>`);
+
+        const firstDay = new Date(year, month, 1).getDay();
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+        // 빈 칸 채우기
+        for(let i=0; i<firstDay; i++) grid.innerHTML += `<div class="calendar-cell"></div>`;
+
+        // 렌더링용 파생 이벤트 계산
+        let allEvents = [];
+
+        // 1. 등록된 회의 이벤트
+        meetings.forEach(m => {
+            allEvents.push({
+                id: `meet_${m.id}`,
+                date: m.date,
+                text: `[${m.type}] ${m.round}`,
+                className: 'color-meeting'
+            });
+        });
+
+        // 2. 안건 및 후속 업무 자동 계산 로직
+        agendas.forEach(a => {
+            let m = meetings.find(x => x.id === a.meetingId);
+            if(!m) return;
+            
+            let mDate = new Date(m.date);
+            
+            // 당일 안건 표시
+            allEvents.push({
+                id: `agenda_${a.id}`,
+                date: m.date,
+                text: `[${a.category}] ${a.name} (${a.result})`,
+                className: 'color-agenda'
+            });
+
+            // 행정지도(소위 전용) -> 차주 수요일(취합), 목요일(결재)
+            if(m.type === '방송소위' && (a.result === '의견제시' || a.result === '권고')) {
+                let wed = new Date(mDate); wed.setDate(wed.getDate() + 8); // 화(2)+8 = 차주수(10)
+                let thu = new Date(mDate); thu.setDate(thu.getDate() + 9); // 차주 목
+                
+                allEvents.push({
+                    id: `admin_g1_${a.id}`, date: toDateStr(wed),
+                    text: `[${m.round}차 취합] ${a.name} 행정지도문`, className: 'color-admin-guide'
+                });
+                allEvents.push({
+                    id: `admin_g2_${a.id}`, date: toDateStr(thu),
+                    text: `[${m.round}차 결재] ${a.name} 행정지도문`, className: 'color-admin-guide'
+                });
+            }
+
+            // 법정제재(전체회의 전용) -> 차차주 화요일(취합), 목요일(결재)
+            if(m.type === '전체회의' && ['주의', '경고', '관계자징계', '과징금'].includes(a.result)) {
+                let tue = new Date(mDate); tue.setDate(tue.getDate() + 15); // 월(1)+15 = 차차주화(16)
+                let thu = new Date(mDate); thu.setDate(thu.getDate() + 17); // 차차주 목
+                
+                allEvents.push({
+                    id: `sanc_1_${a.id}`, date: toDateStr(tue),
+                    text: `[${m.round}차 취합] ${a.name} 의결서`, className: 'color-sanction'
+                });
+                allEvents.push({
+                    id: `sanc_2_${a.id}`, date: toDateStr(thu),
+                    text: `[${m.round}차 결재] ${a.name} 의결서`, className: 'color-sanction'
+                });
+            }
+        });
+
+        // 날짜 칸 그리기
+        for(let d=1; d<=daysInMonth; d++) {
+            let cellDate = toDateStr(new Date(year, month, d));
+            let dayOfWeek = new Date(year, month, d).getDay();
+            let numClass = dayOfWeek === 0 ? 'weekend-sun' : (dayOfWeek === 6 ? 'weekend-sat' : '');
+            
+            let cellHtml = `<div class="calendar-cell">
+                                <span class="date-num ${numClass}">${d}</span>`;
+            
+            // 해당 날짜의 이벤트 매칭
+            let dayEvents = allEvents.filter(e => e.date === cellDate);
+            dayEvents.forEach(e => {
+                let isCompleted = completedEvents.includes(e.id) ? 'completed' : '';
+                cellHtml += `<div class="event-badge ${e.className} ${isCompleted}" onclick="toggleComplete('${e.id}')">${e.text}</div>`;
+            });
+            
+            cellHtml += `</div>`;
+            grid.innerHTML += cellHtml;
+        }
+    }
+
+    // 실행
+    init();
+</script>
+
+</body>
+</html>
